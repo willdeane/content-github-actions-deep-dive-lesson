@@ -1,7 +1,6 @@
-name: Deploy my Lambda Function
+name: Deploy my Lamda Function
 
-# trigger on all push events to main branch
-on: 
+on:
   push:
     branches:
       - main
@@ -10,23 +9,24 @@ jobs:
 
   lint:
     runs-on: ubuntu-latest
-    steps: 
+    steps:
       - name: Check out code
         uses: actions/checkout@v2
-      - name: Set up Python
+      - name: Set up python
         uses: actions/setup-python@v2
         with:
           python-version: 3.8
-      - name: Install linting libraries
+      - name: Installing linting  libraries
         run: |
-            cd function
-            pip install flake8
+          cd function
+          pip install flake8
       - name: Lint with flake8
         run: |
-            # Select identifies which errors should cause the job to fail
+          # Select identifies which errors should cause the job to fail
             flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
             # The exit zero flag will show errors as warnings and not fail the run
             flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        
 
   build:
     runs-on: ubuntu-latest
@@ -39,6 +39,7 @@ jobs:
         with:
           python-version: 3.8
       - name: Install libraries
+
         run: |
             cd function
             python -m pip install --upgrade pip
@@ -46,88 +47,75 @@ jobs:
       - name: Create zip bundle
         run: |
             cd function
-            zip -r ../${{ github.sha }}.zip .
-      - name: Archive artifact
+        zip -r ../${{github.sha}}.zip .
+      - name: Archive artefact
         uses: actions/upload-artifact@v2
         with:
           name: zipped-bundle
-          path: ${{ github.sha }}.zip
-  
+          path: ${{ github.sha}}.zip
+
   upload:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Download artifact
+      - name: Download Artifact
         uses: actions/download-artifact@v2
         with:
           name: zipped-bundle
-      - name: Configure AWS credentials
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{secrets.AWS_ACCESS_KEY_ID}}
+          aws-secret-access-key: ${{secrets.AWS_SECRET_ACCESS_KEY}}
           aws-region: us-east-1
       - name: Upload to S3
-        run: aws s3 cp ${{ github.sha }}.zip s3://<YOUR BUCKET NAME HERE>/${{ github.repository }}/${{ github.sha }}.zip
+        run: aws s3 cp ${{github.sha}}.zip s3://my-bucket-kdkiwkdkeidkei/${{github.sha}}.zip
 
-  nonprod:
+  test:
     runs-on: ubuntu-latest
     needs: upload
     strategy:
       matrix:
         input: ["Hello", "Hi"]
     steps:
-      - name: Configure AWS credentials
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{secrets.AWS_ACCESS_KEY_ID}}
+          aws-secret-access-key: ${{secrets.AWS_SECRET_ACCESS_KEY}}
           aws-region: us-east-1
-      - name: Create test function
+      - name: create test function
         run: |
-            aws lambda create-function --function-name test-function-${{ matrix.input }} \
-              --code S3Bucket=<YOUR BUCKET NAME HERE>,S3Key=${{ github.repository }}/${{ github.sha }}.zip \
-              --handler lambda_function.lambda_handler --runtime python3.8 \
-              --role arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/<YOUR ROLE NAME HERE>
-      - name: Invoke test function 
+          aws lambda create-function --function-name test-function-${{ matrix.input }} --code S3Bucket=my-bucket-kdkiwkdkeidkei,S3Key=${{ github.sha }}.zip --handler lambda_function.lambda_handler --runtime python3.8 --role arn:aws:iam::894510413190:role/my-lambda-role
+      - name: Invoke test function
         run: |
-            aws lambda invoke --function-name test-function-${{ matrix.input }} \
-              --payload $(echo "{\"input\": \"${{ matrix.input }}\"}" | base64) \
-              --output json out 
-            if grep -q "Error" out; then
-              exit1
-            fi
+          aws lambda invoke --function-name test-function-${{ matrix.input }} \
+          --payload $(echo "{\"input\": \"${{ matrix.input }}\"}" |base64) \
+          --output json out
+          if grep -q "Error" out; then
+             exit 1
+          fi
+      - name: Wait 30 seconds
+        run: sleep 30
       - name: Destroy test function
         if: ${{ always() }}
-        run: |
-            aws lambda delete-function --function-name test-function-${{ matrix.input }}
+        run: aws lambda delete-function --function-name test-function-${{ matrix.input }}
+
 
   deploy:
     runs-on: ubuntu-latest
-    needs: upload
+    needs: test
     steps:
-      - name: Configure AWS credentials
+      - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v1
         with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-access-key-id: ${{secrets.AWS_ACCESS_KEY_ID}}
+          aws-secret-access-key: ${{secrets.AWS_SECRET_ACCESS_KEY}}
           aws-region: us-east-1
-      - name: Update function code
+      - name: update function code
         run: |
-            aws lambda update-function-code \
-              --function-name <YOUR FUNCTION NAME HERE> \
-              --s3-bucket <YOUR BUCKET NAME HERE> \
-              --s3-key ${{ github.repository }}/${{ github.sha }}.zip \
-              --publish
-
-  docs:
-    runs-on: ubuntu-latest
-    needs: deploy
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v2
-      - name: Deploy docs
-        uses: mhausenblas/mkdocs-deploy-gh-pages@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CONFIG_FILE: mkdocs.yaml
+          aws lambda update-function-code \
+            --function-name my-function \
+            --s3-bucket my-bucket-kdkiwkdkeidkei \
+            --s3-key ${{github.sha}}.zip \
+            --publish
